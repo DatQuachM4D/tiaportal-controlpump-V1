@@ -180,16 +180,6 @@
                     <Component Name="Stop" />
                   </Symbol>
                 </Access>
-                <Access Scope="GlobalVariable" UId="25">
-                  <Symbol>
-                    <Component Name="RunFoward" />
-                  </Symbol>
-                </Access>
-                <Access Scope="GlobalVariable" UId="26">
-                  <Symbol>
-                    <Component Name="RunRevense" />
-                  </Symbol>
-                </Access>
                 <Access Scope="GlobalVariable" UId="27">
                   <Symbol>
                     <Component Name="Lamp" />
