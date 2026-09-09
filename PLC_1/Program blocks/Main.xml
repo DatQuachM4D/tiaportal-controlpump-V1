@@ -167,28 +167,42 @@
                 </Access>
                 <Access Scope="GlobalVariable" UId="22">
                   <Symbol>
+                    <Component Name="Ready" />
+                  </Symbol>
+                </Access>
+                <Access Scope="GlobalVariable" UId="23">
+                  <Symbol>
                     <Component Name="Foward" />
                   </Symbol>
                 </Access>
-                <Part Name="Contact" UId="23" />
-                <Part Name="Coil" UId="24" />
+                <Part Name="Contact" UId="24" />
+                <Part Name="Contact" UId="25" />
+                <Part Name="Coil" UId="26" />
               </Parts>
               <Wires>
-                <Wire UId="25">
-                  <Powerrail />
-                  <NameCon UId="23" Name="in" />
-                </Wire>
-                <Wire UId="26">
-                  <IdentCon UId="21" />
-                  <NameCon UId="23" Name="operand" />
-                </Wire>
                 <Wire UId="27">
-                  <NameCon UId="23" Name="out" />
+                  <Powerrail />
                   <NameCon UId="24" Name="in" />
                 </Wire>
                 <Wire UId="28">
-                  <IdentCon UId="22" />
+                  <IdentCon UId="21" />
                   <NameCon UId="24" Name="operand" />
+                </Wire>
+                <Wire UId="29">
+                  <NameCon UId="24" Name="out" />
+                  <NameCon UId="25" Name="in" />
+                </Wire>
+                <Wire UId="30">
+                  <IdentCon UId="22" />
+                  <NameCon UId="25" Name="operand" />
+                </Wire>
+                <Wire UId="31">
+                  <NameCon UId="25" Name="out" />
+                  <NameCon UId="26" Name="in" />
+                </Wire>
+                <Wire UId="32">
+                  <IdentCon UId="23" />
+                  <NameCon UId="26" Name="operand" />
                 </Wire>
               </Wires>
             </FlgNet>
