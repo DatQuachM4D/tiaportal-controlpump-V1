@@ -1,0 +1,363 @@
+// =============================================================================
+//  AsciiHex.scl - Thu vien chuyen doi ASCII <-> HEX cho TIA Portal (S7-1200/1500)
+//
+//  Cach them vao TIA Portal:
+//    1. Project tree > PLC_1 > External source files > Add new external file
+//       -> chon file AsciiHex.scl nay.
+//    2. Chuot phai vao AsciiHex.scl > "Generate blocks from source".
+//    3. Cac block duoi day se duoc tao trong "Program blocks".
+//
+//  Danh sach block:
+//    FC "Nibble_To_HexChar"   : 0..15          -> '0'..'F'
+//    FC "HexChar_To_Nibble"   : '0'..'F'/'a'..'f' -> 0..15 (loi: -1)
+//    FC "ASCII_To_HexString"  : 'AB1'          -> '414231' (hoac '41 42 31')
+//    FC "HexString_To_ASCII"  : '414231'       -> 'AB1'
+//    FC "Bytes_To_HexString"  : Array of Byte  -> '0A1BFF'
+//    FC "HexString_To_Bytes"  : '0A1BFF'       -> Array of Byte
+//    DB "AsciiHex_Test"       : du lieu de thu nghiem
+//    FC "AsciiHex_Demo"       : vi du goi cac ham (goi trong OB1 "Main")
+//
+//  Ma loi (gia tri tra ve cua cac FC chuyen doi):
+//     0 : OK
+//    -1 : Ky tu khong phai HEX (chi chap nhan 0-9, A-F, a-f, dau cach)
+//    -2 : Du lieu qua dai (ket qua vuot qua 254 ky tu / vuot kich thuoc mang)
+//    -3 : So ky tu HEX le (thieu 1 ky tu cua cap cuoi)
+//    -4 : Count khong hop le (am hoac lon hon kich thuoc mang)
+// =============================================================================
+
+
+FUNCTION "Nibble_To_HexChar" : Char
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      Nibble : Int;   // 0..15
+   END_VAR
+
+BEGIN
+	// 0..9 -> '0'..'9' (ASCII 48..57), 10..15 -> 'A'..'F' (ASCII 65..70)
+	IF #Nibble >= 0 AND #Nibble <= 9 THEN
+	    #Nibble_To_HexChar := INT_TO_CHAR(#Nibble + 48);
+	ELSIF #Nibble >= 10 AND #Nibble <= 15 THEN
+	    #Nibble_To_HexChar := INT_TO_CHAR(#Nibble + 55);
+	ELSE
+	    #Nibble_To_HexChar := '?';
+	END_IF;
+END_FUNCTION
+
+
+FUNCTION "HexChar_To_Nibble" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      Ch : Char;
+   END_VAR
+
+   VAR_TEMP
+      code : Int;
+   END_VAR
+
+BEGIN
+	// Tra ve 0..15, hoac -1 neu khong phai ky tu HEX
+	#code := CHAR_TO_INT(#Ch);
+	IF #code >= 48 AND #code <= 57 THEN        // '0'..'9'
+	    #HexChar_To_Nibble := #code - 48;
+	ELSIF #code >= 65 AND #code <= 70 THEN     // 'A'..'F'
+	    #HexChar_To_Nibble := #code - 55;
+	ELSIF #code >= 97 AND #code <= 102 THEN    // 'a'..'f'
+	    #HexChar_To_Nibble := #code - 87;
+	ELSE
+	    #HexChar_To_Nibble := -1;
+	END_IF;
+END_FUNCTION
+
+
+FUNCTION "ASCII_To_HexString" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      InText : String;     // Chuoi ASCII, vi du 'AB1'
+      UseSpace : Bool;     // TRUE: '41 42 31', FALSE: '414231'
+   END_VAR
+
+   VAR_OUTPUT
+      HexText : String;    // Ket qua dang HEX
+   END_VAR
+
+   VAR_TEMP
+      i : Int;
+      len : Int;
+      code : Int;
+      needLen : Int;
+      tmpStr : String[2];
+   END_VAR
+
+BEGIN
+	#HexText := '';
+	#len := LEN(#InText);
+
+	// Moi ky tu -> 2 ky tu HEX (+1 dau cach neu UseSpace)
+	IF #UseSpace AND #len > 0 THEN
+	    #needLen := #len * 3 - 1;
+	ELSE
+	    #needLen := #len * 2;
+	END_IF;
+	IF #needLen > 254 THEN
+	    #ASCII_To_HexString := -2;
+	    RETURN;
+	END_IF;
+
+	FOR #i := 1 TO #len DO
+	    #code := CHAR_TO_INT(#InText[#i]);
+	    IF #UseSpace AND #i > 1 THEN
+	        #HexText := CONCAT(IN1 := #HexText, IN2 := ' ');
+	    END_IF;
+	    #tmpStr := "Nibble_To_HexChar"(Nibble := #code / 16);
+	    #HexText := CONCAT(IN1 := #HexText, IN2 := #tmpStr);
+	    #tmpStr := "Nibble_To_HexChar"(Nibble := #code MOD 16);
+	    #HexText := CONCAT(IN1 := #HexText, IN2 := #tmpStr);
+	END_FOR;
+
+	#ASCII_To_HexString := 0;
+END_FUNCTION
+
+
+FUNCTION "HexString_To_ASCII" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      HexText : String;    // Vi du '414231' hoac '41 42 31'
+   END_VAR
+
+   VAR_OUTPUT
+      OutText : String;    // Ket qua ASCII, vi du 'AB1'
+   END_VAR
+
+   VAR_TEMP
+      i : Int;
+      len : Int;
+      code : Int;
+      nib : Int;
+      high : Int;
+      haveHigh : Bool;
+      tmpStr : String[2];
+   END_VAR
+
+BEGIN
+	#OutText := '';
+	#haveHigh := FALSE;
+	#high := 0;
+	#len := LEN(#HexText);
+
+	FOR #i := 1 TO #len DO
+	    // Bo qua dau cach
+	    IF CHAR_TO_INT(#HexText[#i]) <> 32 THEN
+	        #nib := "HexChar_To_Nibble"(Ch := #HexText[#i]);
+	        IF #nib < 0 THEN
+	            #HexString_To_ASCII := -1;
+	            RETURN;
+	        END_IF;
+
+	        IF NOT #haveHigh THEN
+	            #high := #nib;
+	            #haveHigh := TRUE;
+	        ELSE
+	            #code := #high * 16 + #nib;
+	            #tmpStr := INT_TO_CHAR(#code);
+	            #OutText := CONCAT(IN1 := #OutText, IN2 := #tmpStr);
+	            #haveHigh := FALSE;
+	        END_IF;
+	    END_IF;
+	END_FOR;
+
+	IF #haveHigh THEN
+	    #HexString_To_ASCII := -3;
+	ELSE
+	    #HexString_To_ASCII := 0;
+	END_IF;
+END_FUNCTION
+
+
+FUNCTION "Bytes_To_HexString" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      Count : Int;         // So byte can chuyen (tinh tu phan tu dau mang)
+      UseSpace : Bool;     // TRUE: '0A 1B FF', FALSE: '0A1BFF'
+   END_VAR
+
+   VAR_OUTPUT
+      HexText : String;
+   END_VAR
+
+   VAR_IN_OUT
+      Data : Array[*] of Byte;   // Mang byte nguon (bat ky kich thuoc)
+   END_VAR
+
+   VAR_TEMP
+      i : DInt;
+      lo : DInt;
+      hi : DInt;
+      code : Int;
+      needLen : Int;
+      tmpStr : String[2];
+   END_VAR
+
+BEGIN
+	#HexText := '';
+	#lo := LOWER_BOUND(ARR := #Data, DIM := 1);
+	#hi := UPPER_BOUND(ARR := #Data, DIM := 1);
+
+	IF #Count < 0 OR INT_TO_DINT(#Count) > (#hi - #lo + 1) THEN
+	    #Bytes_To_HexString := -4;
+	    RETURN;
+	END_IF;
+
+	IF #UseSpace AND #Count > 0 THEN
+	    #needLen := #Count * 3 - 1;
+	ELSE
+	    #needLen := #Count * 2;
+	END_IF;
+	IF #needLen > 254 THEN
+	    #Bytes_To_HexString := -2;
+	    RETURN;
+	END_IF;
+
+	FOR #i := #lo TO #lo + #Count - 1 DO
+	    #code := BYTE_TO_INT(#Data[#i]);
+	    IF #UseSpace AND #i > #lo THEN
+	        #HexText := CONCAT(IN1 := #HexText, IN2 := ' ');
+	    END_IF;
+	    #tmpStr := "Nibble_To_HexChar"(Nibble := #code / 16);
+	    #HexText := CONCAT(IN1 := #HexText, IN2 := #tmpStr);
+	    #tmpStr := "Nibble_To_HexChar"(Nibble := #code MOD 16);
+	    #HexText := CONCAT(IN1 := #HexText, IN2 := #tmpStr);
+	END_FOR;
+
+	#Bytes_To_HexString := 0;
+END_FUNCTION
+
+
+FUNCTION "HexString_To_Bytes" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      HexText : String;    // Vi du '0A1BFF' hoac '0A 1B FF'
+   END_VAR
+
+   VAR_OUTPUT
+      Count : Int;         // So byte da ghi vao mang
+   END_VAR
+
+   VAR_IN_OUT
+      Data : Array[*] of Byte;   // Mang byte dich (bat ky kich thuoc)
+   END_VAR
+
+   VAR_TEMP
+      i : Int;
+      len : Int;
+      nib : Int;
+      high : Int;
+      haveHigh : Bool;
+      idx : DInt;
+      lo : DInt;
+      hi : DInt;
+   END_VAR
+
+BEGIN
+	#Count := 0;
+	#haveHigh := FALSE;
+	#high := 0;
+	#lo := LOWER_BOUND(ARR := #Data, DIM := 1);
+	#hi := UPPER_BOUND(ARR := #Data, DIM := 1);
+	#idx := #lo;
+	#len := LEN(#HexText);
+
+	FOR #i := 1 TO #len DO
+	    // Bo qua dau cach
+	    IF CHAR_TO_INT(#HexText[#i]) <> 32 THEN
+	        #nib := "HexChar_To_Nibble"(Ch := #HexText[#i]);
+	        IF #nib < 0 THEN
+	            #HexString_To_Bytes := -1;
+	            RETURN;
+	        END_IF;
+
+	        IF NOT #haveHigh THEN
+	            #high := #nib;
+	            #haveHigh := TRUE;
+	        ELSE
+	            IF #idx > #hi THEN
+	                #HexString_To_Bytes := -2;
+	                RETURN;
+	            END_IF;
+	            #Data[#idx] := INT_TO_BYTE(#high * 16 + #nib);
+	            #idx := #idx + 1;
+	            #Count := #Count + 1;
+	            #haveHigh := FALSE;
+	        END_IF;
+	    END_IF;
+	END_FOR;
+
+	IF #haveHigh THEN
+	    #HexString_To_Bytes := -3;
+	ELSE
+	    #HexString_To_Bytes := 0;
+	END_IF;
+END_FUNCTION
+
+
+DATA_BLOCK "AsciiHex_Test"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR
+      Execute : Bool;                      // Dat TRUE de chay chuyen doi 1 lan
+      UseSpace : Bool;                     // Chen dau cach giua cac cap HEX
+      AsciiIn : String := 'Hello PLC 123';
+      HexOut : String;                     // -> '48656C6C6F20504C4320313233'
+      HexIn : String := '48 65 6C 6C 6F';
+      AsciiOut : String;                   // -> 'Hello'
+      Bytes : Array[0..31] of Byte;        // HexIn -> mang byte
+      ByteCount : Int;
+      BytesHex : String;                   // Bytes -> chuoi HEX
+      ErrAsciiToHex : Int;
+      ErrHexToAscii : Int;
+      ErrHexToBytes : Int;
+      ErrBytesToHex : Int;
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK
+
+
+FUNCTION "AsciiHex_Demo" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+BEGIN
+	// Goi FC nay trong OB1 "Main". Dat "AsciiHex_Test".Execute := TRUE
+	// (bang Watch table) de thuc hien chuyen doi.
+	IF "AsciiHex_Test".Execute THEN
+	    "AsciiHex_Test".Execute := FALSE;
+
+	    // ASCII -> HEX
+	    "AsciiHex_Test".ErrAsciiToHex := "ASCII_To_HexString"(InText := "AsciiHex_Test".AsciiIn,
+	                                                          UseSpace := "AsciiHex_Test".UseSpace,
+	                                                          HexText => "AsciiHex_Test".HexOut);
+
+	    // HEX -> ASCII
+	    "AsciiHex_Test".ErrHexToAscii := "HexString_To_ASCII"(HexText := "AsciiHex_Test".HexIn,
+	                                                          OutText => "AsciiHex_Test".AsciiOut);
+
+	    // HEX -> mang byte
+	    "AsciiHex_Test".ErrHexToBytes := "HexString_To_Bytes"(HexText := "AsciiHex_Test".HexIn,
+	                                                          Count => "AsciiHex_Test".ByteCount,
+	                                                          Data := "AsciiHex_Test".Bytes);
+
+	    // Mang byte -> HEX
+	    "AsciiHex_Test".ErrBytesToHex := "Bytes_To_HexString"(Count := "AsciiHex_Test".ByteCount,
+	                                                           UseSpace := "AsciiHex_Test".UseSpace,
+	                                                           HexText => "AsciiHex_Test".BytesHex,
+	                                                           Data := "AsciiHex_Test".Bytes);
+	END_IF;
+END_FUNCTION
